@@ -1,4 +1,5 @@
 ﻿using Blog.Data;
+using Blog.Extensions;
 using Blog.Models;
 using Blog.ViewModels;
 using Microsoft.AspNetCore.Mvc;
@@ -18,8 +19,15 @@ namespace Blog.Controllers
         public async Task<IActionResult> GetAsync(
             [FromServices] BlogDataContext context)
         {
-            var categories = await context.Categories.ToListAsync();
-            return Ok(new { categories = categories });
+            try
+            {
+                var categories = await context.Categories.ToListAsync();
+                return Ok(new ResultViewModel<List<Category>>(categories));
+            }
+            catch
+            {
+                return StatusCode(500, new ResultViewModel<string>("05XE1 - Não foi possível buscar a categoria."));
+            }
         }
 
         [HttpGet("v1/categories/{id:int}")]
@@ -31,67 +39,74 @@ namespace Blog.Controllers
             {
                 var category = await context.Categories.FirstOrDefaultAsync(c => c.Id == id);
 
-                return Ok(new { category = category });
+                if (category == null)
+                    return NotFound(new ResultViewModel<Category>("Conteúdo não encontrado."));
+                return Ok(new ResultViewModel<Category>(category));
             }
             catch (DbUpdateException)
             {
-                return StatusCode(500, "05XE1 - Não foi possível buscar a categoria.");
+                return StatusCode(500, new ResultViewModel<string>("05XE2 - Não foi possível buscar a categoria."));
             }
-            catch (Exception)
+            catch
             {
-                return StatusCode(500, "05XE2 - Falha interna no servidor.");
+                return StatusCode(500, new ResultViewModel<string>("05XE3 - Falha interna no servidor."));
             }
         }
 
         [HttpPost("v1/categories")]
-        public async Task<IActionResult> Post(
+        public async Task<IActionResult> PostAsync(
             [FromServices] BlogDataContext context,
             EditorCategoryViewModel model)
         {
-            if (model == null)
-                return NotFound();
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new ResultViewModel<Category>(ModelState.GetErrors()));
+            }
 
             try
             {
                 Category category = new Category
                 {
                     Name = model.Name,
-                    Slug = GenerateSlug(model.Name),
+                    Slug = model.Slug,
                     Posts = [],
                     Id = 0
                 };
                 await context.Categories.AddAsync(category);
                 await context.SaveChangesAsync();
 
-                return Created($"v1/categories/{category.Id}", model);
+                return Created($"v1/categories/{category.Id}", new ResultViewModel<Category>(category));
             }
             catch (DbUpdateException)
             {
-                return StatusCode(500, "05XE3 - Não foi possível incluir a categoria.");
+                return StatusCode(500, new ResultViewModel<string>("05XE3 - Não foi possível incluir a categoria."));
             }
-            catch (Exception)
+            catch
             {
-                return StatusCode(500, "05XE4 - Falha interna no servidor.");
+                return StatusCode(500, new ResultViewModel<string>("05XE4 - Falha interna no servidor."));
             }
         }
 
         [HttpPut("v1/categories/{id:int}")]
-        public async Task<IActionResult> Put(
+        public async Task<IActionResult> PutAsync(
             [FromServices] BlogDataContext context,
             [FromRoute] int id,
             EditorCategoryViewModel model)
         {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new ResultViewModel<Category>(ModelState.GetErrors()));
+            }
+
             try
             {
                 var category = await context.Categories.FirstOrDefaultAsync(c => c.Id == id);
 
-                category = new Category
-                {
-                    Name = model.Name,
-                    Slug = GenerateSlug(model.Name),
-                    Posts = [],
-                    Id = id
-                };
+                if (category == null)
+                    return NotFound(new ResultViewModel<Category>("Conteúdo não encontrado."));
+
+                category.Name = model.Name;
+                category.Slug = model.Slug;
 
                 context.Categories.Update(category);
                 await context.SaveChangesAsync();
@@ -100,16 +115,16 @@ namespace Blog.Controllers
             }
             catch (DbUpdateException)
             {
-                return StatusCode(500, "05XE5 - Não foi possível atualizar a categoria.");
+                return StatusCode(500, new ResultViewModel<string>("05XE6 - Não foi possível atualizar a categoria."));
             }
-            catch (Exception)
+            catch
             {
-                return StatusCode(500, "05XE6 - Falha interna no servidor.");
+                return StatusCode(500, new ResultViewModel<string>("05XE7 - Falha interna no servidor."));
             }
         }
 
         [HttpDelete("v1/categories/{id:int}")]
-        public async Task<IActionResult> Delete(
+        public async Task<IActionResult> DeleteAsync(
             [FromServices] BlogDataContext context,
             [FromRoute] int id)
         {
@@ -117,57 +132,22 @@ namespace Blog.Controllers
             {
                 var category = await context.Categories.FirstOrDefaultAsync(c => c.Id == id);
 
+                if (category == null)
+                    return NotFound(new ResultViewModel<Category>("Conteúdo não encontrado."));
+
                 context.Categories.Remove(category);
                 await context.SaveChangesAsync();
 
-                return Ok(category);
+                return Ok(new ResultViewModel<Category>(category));
             }
             catch (DbUpdateException)
             {
-                return StatusCode(500, "05XE7 - Não foi possível excluir a categoria.");
+                return StatusCode(500, new ResultViewModel<string>("05XE8 - Não foi possível excluir a categoria."));
             }
-            catch (Exception)
+            catch 
             {
-                return StatusCode(500, "05XE8 - Falha interna no servidor.");
+                return StatusCode(500, new ResultViewModel<string>("05XE9 - Falha interna no servidor."));
             }
-        }
-
-        public string GenerateSlug(string phrase)
-        {
-            if (string.IsNullOrWhiteSpace(phrase))
-                return string.Empty;
-
-            // Converte para minúsculas
-            string slug = phrase.ToLowerInvariant();
-
-            // Remove acentos
-            slug = RemoveDiacritics(slug);
-
-            // Remove caracteres inválidos
-            slug = Regex.Replace(slug, @"[^a-z0-9\s-]", "");
-
-            // Substitui espaços por hífens
-            slug = Regex.Replace(slug, @"\s+", "-").Trim();
-
-            // Remove múltiplos hífens
-            slug = Regex.Replace(slug, @"-+", "-");
-
-            return slug;
-        }
-
-        private string RemoveDiacritics(string text)
-        {
-            var normalizedString = text.Normalize(NormalizationForm.FormD);
-            var stringBuilder = new StringBuilder();
-
-            foreach (var c in normalizedString)
-            {
-                var unicodeCategory = CharUnicodeInfo.GetUnicodeCategory(c);
-                if (unicodeCategory != UnicodeCategory.NonSpacingMark)
-                    stringBuilder.Append(c);
-            }
-
-            return stringBuilder.ToString().Normalize(NormalizationForm.FormC);
         }
     }
 }
