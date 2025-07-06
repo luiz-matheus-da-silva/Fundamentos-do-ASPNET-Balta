@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Blog.Attributes;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Blog.Controllers
 {
@@ -6,7 +7,8 @@ namespace Blog.Controllers
     [Route("")]
     public class HomeController : ControllerBase
     {
-        [HttpGet("health-check")]
+        [HttpGet("")]
+        [ApiKey]
         public IActionResult Get()
         {
             return Ok(
