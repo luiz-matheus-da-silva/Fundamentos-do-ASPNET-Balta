@@ -1,4 +1,5 @@
 ﻿
+using Blog.Extensions;
 using Blog.Models;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
@@ -14,18 +15,14 @@ namespace Blog.Services
         {
             // Cria um manipulador de tokens JWT
             var tokenHandler = new JwtSecurityTokenHandler();
-
             // Converte a chave secreta definida na configuração para um array de bytes
             var key = Encoding.ASCII.GetBytes(Configuration.JwtKey);
+            var claims = user.GetClaims();
 
             // Cria uma descrição do token.
             var tokenDescriptor = new SecurityTokenDescriptor
             {
-                Subject = new ClaimsIdentity(new Claim[]
-                {
-                    new (ClaimTypes.Name, "Luiz"),
-                    new (ClaimTypes.Role, "admin"),
-                }),
+                Subject = new ClaimsIdentity(claims),
                 Expires = DateTime.UtcNow.AddHours(8),
                 SigningCredentials = new SigningCredentials(
                     new SymmetricSecurityKey(key),
